@@ -2,115 +2,101 @@ name: hook0
 
 volumes:
   postgres-data:
+  mailpit-data:
 
 services:
-  # ──────────────────────────────────────────────
-  # PostgreSQL - Base de datos principal
-  # ──────────────────────────────────────────────
   postgres:
     image: postgres:18
     volumes:
       - postgres-data:/var/lib/postgresql
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-hook0}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      - POSTGRES_DB=${POSTGRES_DB:-hook0}
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=hook0
+    ports:
+      - "5432:5432"
     networks:
       - hook0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hook0} -d ${POSTGRES_DB:-hook0}"]
-      timeout: 5s
-      interval: 10s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-    command:
-      - "postgres"
-      - "-c"
-      - "shared_buffers=128MB"
-      - "-c"
-      - "effective_cache_size=256MB"
-      - "-c"
-      - "work_mem=4MB"
-      - "-c"
-      - "maintenance_work_mem=64MB"
-      - "-c"
-      - "max_connections=100"
-      - "-c"
-      - "log_min_duration_statement=1000"
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      timeout: 1s
+      interval: 5s
 
-  # ──────────────────────────────────────────────
-  # Hook0 API
-  # ──────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:v1.28
+    volumes:
+      - mailpit-data:/data
+    environment:
+      - MP_DATABASE=/data/mailpit.db
+      - POSTGRES_DB=hook0
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - hook0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --user-agent 'docker-compose-healthcheck' http://localhost:8025/api/v1/info || exit 1"]
+      timeout: 1s
+      interval: 5s
+
   api:
-    image: hook0/hook0-api:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      args:
+        FEATURES: "application-secret-compatibility"
     environment:
       - IP=0.0.0.0
       - PORT=8081
-      - CORS_ALLOWED_ORIGINS=${HOOK0_PUBLIC_URL:?HOOK0_PUBLIC_URL is required}
-      - DATABASE_URL=postgres://${POSTGRES_USER:-hook0}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hook0}
-      - SMTP_CONNECTION_URL=${SMTP_CONNECTION_URL:?SMTP_CONNECTION_URL is required}
-      - EMAIL_SENDER_ADDRESS=${EMAIL_SENDER_ADDRESS:?EMAIL_SENDER_ADDRESS is required}
-      - APP_URL=${HOOK0_PUBLIC_URL}
-      - BISCUIT_PRIVATE_KEY=${BISCUIT_PRIVATE_KEY:?BISCUIT_PRIVATE_KEY is required}
+      - CORS_ALLOWED_ORIGINS=https://hook0.andeanwide.xyz
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
+      - SMTP_CONNECTION_URL=smtp://mailpit:1025
+      - EMAIL_SENDER_ADDRESS=sender@hook0.local
+      - APP_URL=https://hook0.andeanwide.xyz
+      - BISCUIT_PRIVATE_KEY=bbea79cd66926b219b3219a3186decb36136d774dd7c35a8239e512090fa8854  # DO NOT USE THIS KEY IN PRODUCTION
+    ports:
+      - "8081:8081"
     networks:
       - hook0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --user-agent 'healthcheck' http://localhost:8081/api/v1/swagger.json || exit 1"]
-      timeout: 5s
-      interval: 15s
-      retries: 3
-      start_period: 30s
+      test: ["CMD-SHELL", "curl --fail --user-agent 'docker-compose-healthcheck' http://localhost:$${PORT}/api/v1/swagger.json || exit 1"]
+      timeout: 1s
+      interval: 5s
     depends_on:
       postgres:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
+      mailpit:
+        condition: service_healthy
 
-  # ──────────────────────────────────────────────
-  # Hook0 Frontend (Dashboard)
-  # ──────────────────────────────────────────────
   frontend:
-    image: hook0/hook0-frontend:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     environment:
-      - API_ENDPOINT=${HOOK0_API_URL:-http://api:8081}/api/v1
+      - API_ENDPOINT=https://api.hook0.andeanwide.xyz/api/v1
+    ports:
+      - "8001:80"
     networks:
       - hook0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent --user-agent 'healthcheck' http://localhost || exit 1"]
-      timeout: 5s
-      interval: 15s
-      retries: 3
-      start_period: 15s
+      test: ["CMD-SHELL", "curl --fail --user-agent 'docker-compose-healthcheck' http://localhost || exit 1"]
+      timeout: 1s
+      interval: 5s
     depends_on:
       api:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
 
-  # ──────────────────────────────────────────────
-  # Hook0 Output Worker (procesa webhooks)
-  # ──────────────────────────────────────────────
   output-worker:
-    image: hook0/hook0-output-worker:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: output-worker/Dockerfile
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-hook0}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hook0}
-      - WORKER_NAME=${WORKER_NAME:-default}
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
+      - WORKER_NAME=default
+      - DISABLE_TARGET_IP_CHECK=true
     networks:
       - hook0
     restart: unless-stopped
@@ -119,12 +105,6 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
 
 networks:
   hook0:
