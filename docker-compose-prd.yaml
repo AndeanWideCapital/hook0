@@ -57,9 +57,11 @@ services:
       - hook0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --user-agent 'docker-compose-healthcheck' http://localhost:$${PORT}/api/v1/swagger.json || exit 1"]
-      timeout: 1s
-      interval: 5s
+      test: ["CMD-SHELL", "curl --fail --user-agent 'docker-compose-healthcheck' https://api.hook0.andeanwide.xyz/api/v1/swagger.json || exit 1"]
+      timeout: 5s
+      interval: 15s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
