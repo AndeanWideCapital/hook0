@@ -1,0 +1,131 @@
+name: hook0
+
+volumes:
+  postgres-data:
+
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL - Base de datos principal
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:18
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-hook0}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:-hook0}
+    networks:
+      - hook0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hook0} -d ${POSTGRES_DB:-hook0}"]
+      timeout: 5s
+      interval: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "log_min_duration_statement=1000"
+
+  # ──────────────────────────────────────────────
+  # Hook0 API
+  # ──────────────────────────────────────────────
+  api:
+    image: hook0/hook0-api:${HOOK0_VERSION:-1.0.0-alpha.3}
+    environment:
+      - IP=0.0.0.0
+      - PORT=8081
+      - CORS_ALLOWED_ORIGINS=${HOOK0_PUBLIC_URL:?HOOK0_PUBLIC_URL is required}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-hook0}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hook0}
+      - SMTP_CONNECTION_URL=${SMTP_CONNECTION_URL:?SMTP_CONNECTION_URL is required}
+      - EMAIL_SENDER_ADDRESS=${EMAIL_SENDER_ADDRESS:?EMAIL_SENDER_ADDRESS is required}
+      - APP_URL=${HOOK0_PUBLIC_URL}
+      - BISCUIT_PRIVATE_KEY=${BISCUIT_PRIVATE_KEY:?BISCUIT_PRIVATE_KEY is required}
+    networks:
+      - hook0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --user-agent 'healthcheck' http://localhost:8081/api/v1/swagger.json || exit 1"]
+      timeout: 5s
+      interval: 15s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # ──────────────────────────────────────────────
+  # Hook0 Frontend (Dashboard)
+  # ──────────────────────────────────────────────
+  frontend:
+    image: hook0/hook0-frontend:${HOOK0_VERSION:-1.0.0-alpha.3}
+    environment:
+      - API_ENDPOINT=${HOOK0_API_URL:-http://api:8081}/api/v1
+    networks:
+      - hook0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --user-agent 'healthcheck' http://localhost || exit 1"]
+      timeout: 5s
+      interval: 15s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # ──────────────────────────────────────────────
+  # Hook0 Output Worker (procesa webhooks)
+  # ──────────────────────────────────────────────
+  output-worker:
+    image: hook0/hook0-output-worker:${HOOK0_VERSION:-1.0.0-alpha.3}
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-hook0}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hook0}
+      - WORKER_NAME=${WORKER_NAME:-default}
+    networks:
+      - hook0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+networks:
+  hook0:
+    driver: bridge
