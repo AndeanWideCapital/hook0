@@ -41,7 +41,7 @@ services:
       interval: 5s
 
   api:
-    image: ghcr.io/andeanwidecapital/hook0-api:${HOOK0_VERSION:-latest}
+    image: hook0/hook0-api:${HOOK0_VERSION:-1.0.0-alpha.3}
     environment:
       - IP=0.0.0.0
       - PORT=8081
@@ -67,7 +67,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/andeanwidecapital/hook0-frontend:${HOOK0_VERSION:-latest}
+    image: hook0/hook0-frontend:${HOOK0_VERSION:-1.0.0-alpha.3}
     environment:
       - API_ENDPOINT=https://api.hook0.andeanwide.xyz/api/v1
     ports:
@@ -84,7 +84,7 @@ services:
         condition: service_healthy
 
   output-worker:
-    image: ghcr.io/andeanwidecapital/hook0-output-worker:${HOOK0_VERSION:-latest}
+    image: hook0/hook0-output-worker:${HOOK0_VERSION:-1.0.0-alpha.3}
     environment:
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
       - WORKER_NAME=default
