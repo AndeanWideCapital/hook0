@@ -41,11 +41,7 @@ services:
       interval: 5s
 
   api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-      args:
-        FEATURES: "application-secret-compatibility"
+    image: ghcr.io/andeanwidecapital/hook0-api:${HOOK0_VERSION:-latest}
     environment:
       - IP=0.0.0.0
       - PORT=8081
@@ -71,9 +67,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: ghcr.io/andeanwidecapital/hook0-frontend:${HOOK0_VERSION:-latest}
     environment:
       - API_ENDPOINT=https://api.hook0.andeanwide.xyz/api/v1
     ports:
@@ -90,9 +84,7 @@ services:
         condition: service_healthy
 
   output-worker:
-    build:
-      context: .
-      dockerfile: output-worker/Dockerfile
+    image: ghcr.io/andeanwidecapital/hook0-output-worker:${HOOK0_VERSION:-latest}
     environment:
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
       - WORKER_NAME=default
