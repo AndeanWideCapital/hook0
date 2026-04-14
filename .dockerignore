@@ -1,6 +1,6 @@
 target/
 .git/
-frontend/
+# frontend/
 documentation/
 website/
 e2e-tests/
