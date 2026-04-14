@@ -14,8 +14,7 @@ RUN sed -i '/file_server/i try_files {path} /index.html' /etc/caddy/Caddyfile
 RUN apk --no-cache add curl
 COPY --from=build /app/dist /usr/share/caddy/
 
-COPY --from=build /app/scripts/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY frontend/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 
 EXPOSE 80
 CMD ["/docker-entrypoint.sh"]
