@@ -10,8 +10,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=hook0
+      - POSTGRES_USER=${SERVICE_USER_POSTGRES}
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      - POSTGRES_DB=${POSTGRES_DB:-hook0}
     ports:
       - "5432:5432"
     networks:
@@ -21,43 +22,28 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
       timeout: 1s
       interval: 5s
-
-  mailpit:
-    image: axllent/mailpit:v1.28
-    volumes:
-      - mailpit-data:/data
-    environment:
-      - MP_DATABASE=/data/mailpit.db
-      - POSTGRES_DB=hook0
-    ports:
-      - "8025:8025"
-      - "1025:1025"
-    networks:
-      - hook0
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --user-agent 'docker-compose-healthcheck' http://localhost:8025/api/v1/info || exit 1"]
-      timeout: 1s
-      interval: 5s
-
   api:
-    image: hook0/hook0-api:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      args:
+        FEATURES: "application-secret-compatibility"
     environment:
       - IP=0.0.0.0
       - PORT=8081
       - CORS_ALLOWED_ORIGINS=https://hook0.andeanwide.xyz
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
-      - SMTP_CONNECTION_URL=smtp://mailpit:1025
-      - EMAIL_SENDER_ADDRESS=sender@hook0.local
+      - DATABASE_URL=postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-hook0}
+      - SMTP_CONNECTION_URL=${SMTP_CONNECTION_URL:?SMTP_CONNECTION_URL is required}
+      - EMAIL_SENDER_ADDRESS=${EMAIL_SENDER_ADDRESS:?EMAIL_SENDER_ADDRESS is required}
       - APP_URL=https://hook0.andeanwide.xyz
-      - BISCUIT_PRIVATE_KEY=bbea79cd66926b219b3219a3186decb36136d774dd7c35a8239e512090fa8854  # DO NOT USE THIS KEY IN PRODUCTION
+      - BISCUIT_PRIVATE_KEY=${BISCUIT_PRIVATE_KEY:?BISCUIT_PRIVATE_KEY is required}
     ports:
       - "8081:8081"
     networks:
       - hook0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --user-agent 'docker-compose-healthcheck' http://localhost:$${PORT}/api/v1/swagger.json || exit 1"]
+      test: ["CMD-SHELL", "curl --fail --silent --user-agent 'healthcheck' http://localhost:8081/api/v1/swagger.json || exit 1"]
       timeout: 5s
       interval: 15s
       retries: 5
@@ -69,11 +55,13 @@ services:
         condition: service_healthy
 
   frontend:
-    image: hook0/hook0-frontend:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     environment:
       - API_ENDPOINT=https://api.hook0.andeanwide.xyz/api/v1
     ports:
-      - "8002:80"
+      - "8001:80"
     networks:
       - hook0
     restart: unless-stopped
@@ -86,9 +74,11 @@ services:
         condition: service_healthy
 
   output-worker:
-    image: hook0/hook0-output-worker:${HOOK0_VERSION:-1.0.0-alpha.3}
+    build:
+      context: .
+      dockerfile: output-worker/Dockerfile
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
+      - DATABASE_URL=postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-hook0}
       - WORKER_NAME=default
       - DISABLE_TARGET_IP_CHECK=true
     networks:
