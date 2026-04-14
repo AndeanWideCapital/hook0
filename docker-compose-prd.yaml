@@ -45,11 +45,11 @@ services:
     environment:
       - IP=0.0.0.0
       - PORT=8081
-      - CORS_ALLOWED_ORIGINS=http://localhost:8001
+      - CORS_ALLOWED_ORIGINS=https://hook0.andeanwide.xyz
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/hook0
       - SMTP_CONNECTION_URL=smtp://mailpit:1025
       - EMAIL_SENDER_ADDRESS=sender@hook0.local
-      - APP_URL=http://localhost:8001
+      - APP_URL=https://hook0.andeanwide.xyz
       - BISCUIT_PRIVATE_KEY=bbea79cd66926b219b3219a3186decb36136d774dd7c35a8239e512090fa8854  # DO NOT USE THIS KEY IN PRODUCTION
     ports:
       - "8081:8081"
@@ -71,7 +71,7 @@ services:
   frontend:
     image: hook0/hook0-frontend:${HOOK0_VERSION:-1.0.0-alpha.3}
     environment:
-      - API_ENDPOINT=http://localhost:8081/api/v1
+      - API_ENDPOINT=https://api.hook0.andeanwide.xyz/api/v1
     ports:
       - "8002:80"
     networks:
